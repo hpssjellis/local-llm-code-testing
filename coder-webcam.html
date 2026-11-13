@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webcam Capture and Save</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+
+        canvas {
+            border: 2px solid black;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="webcamCanvas" width="640" height="480"></canvas>
+    <button id="saveButton">Save Image</button>
+
+    <script>
+        // Get the webcam canvas and save button
+        const webcamCanvas = document.getElementById('webcamCanvas');
+        const saveButton = document.getElementById('saveButton');
+
+        // Check if the browser supports the webcam
+        if (!navigator.mediaDevices.getUserMedia) {
+            alert('Webcam is not supported in your browser.');
+            return;
+        }
+
+        // Function to capture the webcam image
+        async function captureImage() {
+            try {
+                // Get access to the webcam
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                const canvasContext = webcamCanvas.getContext('2d');
+
+                // Draw the webcam frame onto the canvas
+                canvasContext.drawImage(stream.getVideoTracks()[0], 0, 0, webcamCanvas.width, webcamCanvas.height);
+
+                // Get the URL of the captured image
+                const dataURL = webcamCanvas.toDataURL('image/png');
+
+                // Create an anchor element to trigger the save
+                const link = document.createElement('a');
+                link.href = dataURL;
+                link.download = 'webcam_image.png';
+                link.click();
+            } catch (error) {
+                console('Error capturing image:', error);
+            }
+        }
+
+        // Add an event listener to the save button
+        saveButton.addEventListener('click', captureImage);
+    </script>
+</body>
+</html>
