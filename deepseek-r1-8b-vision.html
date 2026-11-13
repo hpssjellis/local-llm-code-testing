@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Webcam Vision ML</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <style>
+        body { font-family: Arial; }
+ .container { margin: 20px; }
+        .controls { display: flex; flex-wrap: wrap; gap: 10px; }
+        #webcamFeed { display: flex; gap: 20px; }
+        #webcam { width: 640px; height: 480px; }
+        .thumbnails { display: flex; flex-wrap: wrap; gap: 10px; }
+        .thumbnails div { width: 100px; margin: 5px; }
+        button { padding: 10px; cursor: pointer; }
+        .class-btn { width: 100px; padding: 5px; margin: 5px; }
+        .thumbnails img { width: 100px; height: auto; border: 1px solid; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="controls">
+            <input type="number" id="classCount" min="1" max="10" value="3">
+            <button id="startWebcam">Start Webcam</button>
+            <button id="collectData">Collect Data</button>
+            <button id="trainModel">Train Model</button>
+            <button id="testModel">Test Model</button>
+        </div>
+        <div id="webcamFeed"></div>
+        <div class="thumbnails" id="thumbnails"></div>
+        <div id="trainingInfo"></div>
+    </div>
+
+    <script>
+        let model;
+        let webcam;
+        let isWebcamRunning = false;
+        let numClasses = 3;
+        let currentClass = 0;
+        let imageData = Array(numClasses).fill().map(() => []);
+        let classButtons = [];
+        
+        // Initialize class buttons
+        function initClassButtons() {
+            // Clear existing buttons
+            document.querySelector('.controls').innerHTML = '';
+            
+            // Update class count
+            numClasses = parseInt(document.getElementById('classCount').value);
+            if (numClasses !== imageData.length) {
+                imageData = Array(numClasses).fill().map(() => []);
+            }
+            
+            // Create class buttons
+            const controlsDiv = document.createElement('div');
+            controlsDiv.className = 'controls';
+            
+            const classContainer = document.createElement('div');
+            classContainer.className = 'class-buttons-container';
+            
+            for (let = 0; i < numClasses; i++) {
+                const button = document.createElement('button');
+                button.className = 'class-btn';
+                button.innerText = `Class ${i}`;
+                button.addEventListener('click', () => {
+                    currentClass = i;
+                    document.getElementById('collectData').innerText = `Collect Class ${i}`;
+                    console.log(`Selected class: ${i}`);
+                });
+                classContainer.appendChild(button);
+            }
+            
+            // Create collect button
+            const collectBtn = document.createElement('button');
+            collectBtn.innerText = `Collect Class ${currentClass}`;
+            collectBtn.addEventListener('click', collectImage);
+            
+            // Add all elements to controls div
+            controlsDiv.appendChild(document.getElementById('classCount'));
+            controlsDiv.appendChild(document.createElement('br')));
+            controlsDiv.appendChild(classContainer);
+            controlsDiv.appendChild(collectBtn);
+            
+            document.querySelector('.container').appendChild(controlsDiv);
+        }
+        
+        // Collect image function
+        async function collectImage() {
+            if (!isWebcamRunning) {
+                alert('Webcam is not running. Please start the webcam first.');
+                return;
+            }
+            if (currentClass === null) {
+                alert('Please select a class first.');
+                return;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 100;
+            canvas.height = 100;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(webcam, 0, 0, canvas.width, canvas.height);
+            
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const tensor = tf.browser.fromPixels(imgData).resize([100, 100]).toFloat().div(255.0).expandDims();
+            
+            // Store tensor for this class
+            imageData[currentClass].push(tensor);
+            
+            // Display thumbnail
+            const thumbnailDiv = document.getElementById(`thumbnails-container-${currentClass}`);
+            if (!thumbnailDiv) {
+                thumbnailDiv = document.createElement('div');
+                thumbnailDiv.id = `thumbnails-container-${currentClass}`;
+                document.getElementById('thumbnails').appendChild(thumbnailDiv);
+            }
+            
+            const thumbnail = document.createElement('img');
+            thumbnail.src = await tensor.data().then(d => URL.createObjectURL(tf.browser.toPixels(tensor)));
+            thumbnailDiv.appendChild(thumbnail);
+            
+            console.log(`Captured ${imageData[currentClasslength} image(s) for class ${currentClass}`);
+        }
+        
+        // Start webcam
+        document.getElementById('startWebcam').addEventListener('click', async () => {
+            try {
+                const video = document.createElement('video');
+                video.width = 640;
+                video.height = 480;
+                document.getElementById('webcamFeed').innerHTML = '';
+                document.getElementById('webcamFeed').appendChild(video);
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.src = URL.createObjectURL(stream);
+                webcam = video;
+                
+                isWebcamRunning = true;
+                video.onloadedmetadata = () => {
+                    video.play();
+                    console.log('Webcam started successfully');
+                };
+            } catch (error) {
+                console.error('Error starting webcam:', error);
+                alert('Error starting webcam: ' + error.message);
+            }
+        });
+        
+        // Train model
+        document.getElementById('trainModel').addEventListener('click', async () => {
+            // Check if we have enough data
+            if (imageData.some(arr => arr.length === 0)) {
+                alert('Please collect at least one image for each class.');
+                return;
+            }
+            
+            // Prepare data
+            const xs = [];
+            const ys = [];
+            for (let i = 0; i < numClasses; i++) {
+                xs.push(...imageData[i]);
+                ys.push(...Array(imageData[i].length).fill(i));
+            }
+            
+            // Create simple CNN model
+            model = tf.sequential({
+                layers: [
+                    tf.layers.conv2d({inputShape: [100,100,3], filters: 32, kernelSize: 3, activation: 'relu'}),
+                    tf.layers.pool({poolSize: 2, strides: 2}),
+                    tf.layers.flatten(),
+                    tf.layers.dense({units: 128, activation: 'relu'}),
+                    tf.layers.dense({units: numClasses, activation: 'softmax'})
+                ]
+            });
+            
+            model.compile({
+                optimizer: tf.train.adam(0.001),
+                loss: 'categoricalCrossentropy',
+                metrics: ['accuracy']
+            });
+            
+            // Train model
+            const history = await model.fit(xs, tf.oneHot(ys, numClasses), {epochs: 10});
+            console.log('Training complete:', history        });
+        
+        // Test model
+        document.getElementById('testModel').addEventListener('click', async () => {
+            if (!isWebcamRunning) {
+                alert('Webcam is not running. Please start the webcam first.');
+                return;
+            }
+            
+            if (!model) {
+                alert('Please train the model first.');
+                return;
+            }
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = 100;
+            canvas.height = 100;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(webcam, 0, 0, canvas.width, canvas.height);
+            
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const tensor = tf.browser.fromPixels(imgData).resize([100, 100]).toFloat().div(255.0).expandDims();
+            
+            // Predict
+            const prediction = model.predict(tensor);
+            const scores = await prediction.data();
+            const maxIndex = tf.argMax(prediction, 1).dataSync()[0];
+            
+            document.getElementById('trainingInfo').innerHTML = 
+                `Predicted class: ${maxIndex}<br>Confidence: ${(scores[maxIndex] * 100).toFixed(2)}%<br>Probabilities: ${scores}`;
+                
+            tensor.dispose();
+        });
+        
+        // Handle class count change
+        document.getElementById('classCount').addEventListener('change', (e) => {
+            numClasses = parseInt(e.target.value);
+            if (numClasses !== imageData.length) {
+                imageData = Array(numClasses).fill().map(() => []);
+                currentClass = 0;
+                initClassButtons();
+            }
+        });
+        
+        // Initialize page
+        window.onload = () => {
+            initClassButtons();
+            console.log('Page loaded');
+        };
+    </script>
+</body>
+</html>

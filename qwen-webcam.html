@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webcam Image Capture</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        #video {
+            width: 100%;
+            max-width: 400px;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        #canvas {
+            display: none;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #photo {
+            max-width: 100%;
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .error {
+            color: red;
+            margin: 10px 0;
+        }
+        .info {
+            color: #666;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Webcam Image Capture</h1>
+        <div id="error" class="error"></div>
+        <div id="info" class="info">Note: This page must be served over HTTPS for camera access to work.</div>
+        <video id="video" autoplay playsinline></video><br>
+        <button onclick="startCamera()">Start Camera</button>
+        <button onclick="captureImage()" id="captureBtn" disabled>Capture Photo</button>
+        <br><br>
+        <img id="photo" alt="Captured image">
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document('canvas');
+        const photo = document.getElementById('photo');
+        const errorDiv = document.getElementById('error');
+        const infoDiv = document.getElementById('info');
+        const captureBtn = document.getElementById('captureBtn');
+
+        // Check if we're on HTTPS
+        if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+            infoDiv.innerHTML += '<br><strong>Important:</strong> Camera access requires HTTPS. This page must be served over HTTPS or accessed via localhost.';
+        }
+
+        // Start the webcam
+        function startCamera() {
+            errorDiv.textContent = '';
+            
+            // Try different camera constraints for better compatibility
+            const constraints = {
+                video: {
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    facingMode: "user"
+                },
+                audio: false
+            };
+
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(stream => {
+                    video.srcObject = stream;
+                    captureBtn.disabled = false;
+                    errorDiv.textContent = 'Camera started successfully!';
+                })
+                .catch(err => {
+                    console.error('Camera error:', err);
+                    let errorMessage = `Camera access failed: ${err.message || 'Unknown error'}`;
+                    
+                    // Provide specific help messages
+                    if (err.name === 'NotAllowedError') {
+                        errorMessage = 'Camera access denied. Please allow camera permissions in your browser settings.';
+                    } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
+                        errorMessage = 'No camera found or camera constraints not supported.';
+                    } else if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+                        errorMessage = 'HTTPS required for camera access. Please use a secure connection.';
+                    }
+                    
+                    errorDiv.textContent = errorMessage;
+                });
+        }
+
+        // Capture image from video stream
+        function captureImage() {
+            try {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+                
+                // Convert to data URL display
+                photo.src = canvas.toDataURL('image/png');
+                
+                // Auto-download the image
+                const link = document.createElement('a');
+                link.download = 'webcam-photo-' + new Date().getTime() + '.png';
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            } catch (err) {
+                errorDiv.textContent = 'Error capturing image: ' + err.message;
+            }
+        }
+
+        // Handle video events
+        video.addEventListener('loadeddata', () => {
+            console.log('Video loaded successfully');
+        });
+
+        video.addEventListener('error', (err) =>
+            console.error('Video error:', err);
+            errorDiv.textContent = 'Video playback error occurred';
+        });
+    </script>
+</body>
+</html>
